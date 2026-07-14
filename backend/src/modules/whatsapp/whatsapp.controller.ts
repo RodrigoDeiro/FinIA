@@ -35,9 +35,6 @@ export function createWhatsAppController(provider: IWhatsAppProvider) {
       return
     }
 
-    // TEMP DEBUG (remover depois): captura o payload cru p/ diagnosticar o LID.
-    request.log.info({ rawWebhook: request.body }, 'WEBHOOK_RAW_DEBUG')
-
     // 2. Normalização
     const normalized = provider.parseWebhook(request.body)
     if (!normalized) {
