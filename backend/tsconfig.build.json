@@ -1,0 +1,68 @@
+{
+  // Configuração TypeScript para build de produção.
+  // Usado por: tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json
+  //
+  // Herda tudo do tsconfig.json base e sobrescreve apenas o necessário:
+  //   1. Exclui arquivos de teste do output
+  //   2. Desliga source maps (produção não precisa)
+  //   3. Desliga declarations (backend não exporta tipos para consumidores)
+  //   4. Activa checagens extras de qualidade
+
+  "extends": "./tsconfig.json",
+
+  "compilerOptions": {
+
+    // ─── Output ──────────────────────────────────────────────────────────────
+
+    // rootDir fixado aqui (e não no base) para que o output seja dist/server.js
+    // e não dist/src/server.js. O build inclui apenas src/**, então é seguro.
+    "rootDir": "./src",
+
+
+    // Source maps desligados em produção.
+    // Em dev (tsconfig.json) ficam ligados para o debugger e tsx watch.
+    // Em prod, o stack trace é suficiente com os arquivos .js gerados.
+    // Se quiser profiling de produção, habilite e monte o volume de mapas
+    // separadamente no Docker — não inclua no artefato principal.
+    "sourceMap":      false,
+    "inlineSources":  false,
+
+    // Declarations desnecessárias: este é um servidor, não uma biblioteca.
+    // Desligar reduz o tempo de build e o tamanho do artefato em ~15%.
+    "declaration":    false,
+    "declarationMap": false,
+
+    // ─── Checagens extras para produção ──────────────────────────────────────
+
+    // Variáveis locais não utilizadas viram erro no build de produção.
+    // Em dev (tsconfig.json) está false para não atrapalhar WIP.
+    "noUnusedLocals": true,
+
+    // Parâmetros de função não utilizados viram erro no build de produção.
+    // Exceção: parâmetros prefixados com _ são ignorados por convenção.
+    //   Ex: (_req: FastifyRequest, reply: FastifyReply) => { ... }
+    "noUnusedParameters": true
+  },
+
+  // ─── Include / Exclude ───────────────────────────────────────────────────
+  // Sobrescreve o include/exclude do tsconfig.json base.
+
+  "include": [
+    "src/**/*.ts"
+    // prisma/seed.ts excluído propositalmente:
+    // seed não faz parte do artefato de produção.
+  ],
+
+  "exclude": [
+    "node_modules",
+    "dist",
+
+    // Arquivos de teste nunca entram no build de produção
+    "src/tests/**/*.ts",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts",
+
+    // Fixtures e helpers de teste
+    "src/tests/fixtures/**/*.ts"
+  ]
+}

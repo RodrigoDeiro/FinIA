@@ -1,0 +1,101 @@
+{
+  "compilerOptions": {
+
+    // ─── Módulos ─────────────────────────────────────────────────────────────
+    // NodeNext: modo correto para backends Node.js com ESM nativo.
+    // "module" e "moduleResolution" devem ser idênticos quando NodeNext.
+    //
+    // Comportamento:
+    //   - Respeita o campo "exports" em package.json dos pacotes instalados
+    //   - Exige extensão .js em imports relativos no código fonte
+    //   - tsc emite imports com .js no dist/ → Node.js ESM funciona em prod
+    //
+    // Por que não "bundler":
+    //   "bundler" não adiciona .js no output do tsc. Com "node dist/server.js"
+    //   em produção, o Node.js ESM falha ao resolver imports sem extensão.
+    //   "bundler" só é correto quando há um bundler (tsup/esbuild/vite) na
+    //   cadeia de produção — não é o caso deste projeto.
+    "module":           "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    // Permite import default de módulos CJS (dayjs, axios, pino-pretty, etc.)
+    "esModuleInterop": true,
+
+    // ─── Output ──────────────────────────────────────────────────────────────
+    // Node 22 suporta ES2023 nativamente: top-level await, structuredClone,
+    // Array.at, Object.hasOwn, Error.cause, Array.findLast — sem polyfills.
+    "target": "ES2023",
+
+    "outDir":  "./dist",
+    // rootDir NÃO é fixado aqui: o typecheck base também inclui prisma/seed.ts
+    // (fora de src/), e um rootDir "./src" dispararia TS6059. O build de
+    // produção (tsconfig.build.json) define rootDir "./src" para emitir
+    // dist/server.js — lá o seed é propositalmente excluído.
+
+    // Source maps para stack traces legíveis em produção e no debugger
+    "sourceMap":      true,
+    "declaration":    true,
+    "declarationMap": true,
+
+    // ─── Strictness ──────────────────────────────────────────────────────────
+    // Ativa: noImplicitAny, strictNullChecks, strictFunctionTypes,
+    //        strictBindCallApply, strictPropertyInitialization,
+    //        noImplicitThis, alwaysStrict (use strict em todo arquivo)
+    "strict": true,
+
+    // Proíbe return implícito sem valor em funções não-void
+    "noImplicitReturns": true,
+
+    // Proíbe fallthrough em switch/case sem break explícito
+    "noFallthroughCasesInSwitch": true,
+
+    // ─── Interoperabilidade ───────────────────────────────────────────────────
+    // Importa global-merchants.json e outros .json com tipagem automática
+    "resolveJsonModule": true,
+
+    // Detecta bugs de case em import paths (fatal no Linux, silencioso no Mac)
+    "forceConsistentCasingInFileNames": true,
+
+    // Cada arquivo compilável de forma isolada (obrigatório para esbuild/tsx)
+    "isolatedModules": true,
+
+    // Permite default imports de módulos sem default export declarado
+    "allowSyntheticDefaultImports": true,
+
+    // Não verifica tipos dentro de node_modules (performance)
+    "skipLibCheck": true,
+
+    // ─── Libs ─────────────────────────────────────────────────────────────────
+    "lib": ["ES2023"],
+
+    // ─── Path Aliases ─────────────────────────────────────────────────────────
+    // Imports limpos sem sequências de ../../../
+    //
+    // Com NodeNext: o alias deve incluir .js no import
+    //   import { env } from '@config/env.js'
+    //
+    // O tsx resolve os aliases via tsconfig automaticamente em dev.
+    // Em produção, tsc emite os paths expandidos com extensão correta.
+    "baseUrl": ".",
+    "paths": {
+      "@config/*":   ["src/config/*"],
+      "@database/*": ["src/database/*"],
+      "@cache/*":    ["src/cache/*"],
+      "@queue/*":    ["src/queue/*"],
+      "@modules/*":  ["src/modules/*"],
+      "@shared/*":   ["src/shared/*"],
+      "@tests/*":    ["src/tests/*"]
+    }
+  },
+
+  "include": [
+    "src/**/*.ts",
+    "prisma/seed.ts"
+  ],
+
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/tests/**/*.test.ts"
+  ]
+}

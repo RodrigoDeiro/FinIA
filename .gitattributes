@@ -1,0 +1,7 @@
+# Normaliza fim de linha: LF no repositório (evita quebra do entrypoint.sh e de
+# scripts shell quando clonado no Windows).
+* text=auto eol=lf
+
+# Sempre LF (scripts executados dentro de containers Linux)
+*.sh text eol=lf
+Dockerfile text eol=lf

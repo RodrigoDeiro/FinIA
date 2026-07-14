@@ -1,0 +1,135 @@
+# =============================================================================
+# FinIA — Stack de PRODUÇÃO (rode com 1 comando)
+# =============================================================================
+#
+#   docker compose --env-file .env.production -f docker-compose.prod.yml up -d --build
+#
+# Serviços:
+#   postgres  — banco do FinIA (+ banco 'evolution' via init script)
+#   redis     — cache/filas (noeviction) + cache da Evolution (DB 1)
+#   evolution — gateway WhatsApp (Baileys) — escaneie o QR para conectar
+#   app       — backend + dashboard (imagem única, mesma origem)
+#
+# Depois de subir: dashboard em http://localhost:3000
+#                  Evolution manager em http://localhost:8080
+# =============================================================================
+
+# Nome de projeto PRÓPRIO: isola volumes/rede/containers da stack de dev
+# (docker-compose.yml). Sem isto, os dois dividiriam o volume do banco.
+name: finia-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: finia_prod_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [finia]
+
+  redis:
+    image: redis:7-alpine
+    container_name: finia_prod_redis
+    restart: unless-stopped
+    command: >
+      redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb --maxmemory-policy noeviction
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [finia]
+
+  evolution:
+    image: evoapicloud/evolution-api:v2.2.3
+    container_name: finia_prod_evolution
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      SERVER_URL: ${EVOLUTION_PUBLIC_URL:-http://localhost:8080}
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      DATABASE_ENABLED: 'true'
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/evolution
+      DATABASE_CONNECTION_CLIENT_NAME: evolution
+      DATABASE_SAVE_DATA_INSTANCE: 'true'
+      DATABASE_SAVE_DATA_NEW_MESSAGE: 'false'
+      DATABASE_SAVE_MESSAGE_UPDATE: 'false'
+      DATABASE_SAVE_DATA_CONTACTS: 'false'
+      DATABASE_SAVE_DATA_CHATS: 'false'
+      CACHE_REDIS_ENABLED: 'true'
+      CACHE_REDIS_URI: redis://:${REDIS_PASSWORD}@redis:6379/1
+      CACHE_REDIS_PREFIX_KEY: evolution
+      CACHE_REDIS_SAVE_INSTANCES: 'true'
+      CACHE_LOCAL_ENABLED: 'false'
+    volumes:
+      - evolution_instances:/evolution/instances
+    ports:
+      - '8080:8080'
+    networks: [finia]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: finia_prod_app
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      LOG_LEVEL: info
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      WHATSAPP_PROVIDER: evolution
+      EVOLUTION_API_URL: http://evolution:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+      EVOLUTION_INSTANCE_NAME: ${EVOLUTION_INSTANCE_NAME:-finia}
+      EVOLUTION_WEBHOOK_SECRET: ${EVOLUTION_WEBHOOK_SECRET}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+    volumes:
+      - finia_storage:/app/storage
+    ports:
+      - '3000:3000'
+    healthcheck:
+      # 127.0.0.1 (não 'localhost'): dentro do container localhost pode resolver
+      # para IPv6 (::1), mas o servidor escuta em IPv4.
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 40s
+    networks: [finia]
+
+volumes:
+  postgres_data:
+  redis_data:
+  evolution_instances:
+  finia_storage:
+
+networks:
+  finia:
+    driver: bridge

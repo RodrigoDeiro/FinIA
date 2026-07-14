@@ -1,0 +1,687 @@
+// =============================================================================
+// FinIA — Schema do Banco de Dados
+// =============================================================================
+//
+// Schema completo: contém TODAS as tabelas dos Sprints 1 a 5.
+// Tabelas não usadas em Sprints iniciais permanecem vazias até serem populadas.
+//
+// Convenções:
+//   - IDs: CUID (sortável por tempo, mais curto que UUID, sem overhead)
+//   - Valores monetários: Decimal(15, 2) — precisão financeira no PostgreSQL
+//   - Datas: DateTime (timestamp com timezone) — sempre UTC no banco
+//   - Soft delete: deletedAt DateTime? em todas as tabelas tenant-scoped
+//   - Multi-tenant: userId indexado em todas as tabelas com dados de usuário
+//
+// =============================================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  // Binários para Linux Alpine (Docker) e Debian (servidores comuns)
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+/// Tipo de transação financeira
+enum TransactionType {
+  EXPENSE      // gasto
+  INCOME       // receita
+  INVESTMENT   // investimento
+  TRANSFER     // transferência entre contas
+  DEBT         // dívida / parcela
+}
+
+/// Origem do registro da transação
+enum TransactionSource {
+  WHATSAPP     // mensagem via WhatsApp (parser determinístico ou Claude)
+  WEB          // dashboard web
+  IMPORT       // importação de extrato (Sprint futuro)
+  MANUAL       // ajuste manual via comando admin
+}
+
+/// Método usado para extrair os dados da transação (auditoria de IA)
+enum ParseMethod {
+  DETERMINISTIC // 100% parsing local sem IA
+  AI            // Claude foi usado para interpretar a mensagem
+  HYBRID        // parser local extraiu parte, Claude completou
+  MANUAL        // entrada manual via dashboard
+}
+
+/// Tipo de conta financeira
+enum AccountType {
+  CHECKING        // conta corrente
+  SAVINGS         // poupança
+  CREDIT_CARD     // cartão de crédito
+  INVESTMENT      // conta de investimentos
+  CASH            // dinheiro físico
+  WALLET          // carteira digital (PicPay, Mercado Pago)
+  OTHER
+}
+
+/// Origem da categoria (sistema imutável vs customizada do usuário)
+enum CategoryOrigin {
+  SYSTEM       // categorias padrão (12 fixas) — userId = null
+  USER         // categorias criadas pelo usuário — userId obrigatório
+}
+
+/// Periodicidade de um orçamento
+enum BudgetPeriod {
+  MONTHLY      // ciclo mensal (1º ao último dia do mês)
+  WEEKLY       // semanal (segunda a domingo)
+  YEARLY       // anual
+}
+
+/// Status de uma meta financeira
+enum GoalStatus {
+  ACTIVE       // em andamento
+  ACHIEVED     // meta atingida
+  ABANDONED    // usuário desistiu
+  PAUSED       // em pausa
+}
+
+/// Tipo de insight gerado pelo sistema
+enum InsightType {
+  SPENDING_INCREASE    // gasto em categoria cresceu acima de threshold
+  SPENDING_DECREASE    // gasto em categoria diminuiu
+  CATEGORY_RANKING     // ranking das categorias do período
+  BUDGET_ALERT         // ultrapassou X% do orçamento
+  GOAL_PROGRESS        // progresso em uma meta
+  SAVINGS_TREND        // tendência de economia
+  ANOMALY              // valor atípico detectado
+  GENERIC              // insight narrativo do Claude
+}
+
+/// Status de geração de um relatório
+enum ReportStatus {
+  PENDING      // job enfileirado
+  GENERATING   // worker processando
+  COMPLETED    // arquivo gerado, link disponível
+  FAILED       // erro durante geração
+}
+
+/// Tipo de ação registrada no log de auditoria
+enum AuditAction {
+  USER_CREATED
+  USER_UPDATED
+  TRANSACTION_CREATED
+  TRANSACTION_UPDATED
+  TRANSACTION_DELETED
+  CATEGORY_CORRECTED      // usuário corrigiu categorização
+  SESSION_STARTED         // login web via magic link
+  SESSION_REVOKED         // logout ou revogação manual
+  REPORT_GENERATED
+}
+
+// =============================================================================
+// USERS — Identidade do sistema
+// =============================================================================
+//
+// O número de WhatsApp é a chave natural. O ID interno (CUID) é usado em
+// relacionamentos e referências internas.
+//
+model User {
+  id          String   @id @default(cuid())
+
+  /// Número em formato E.164 (ex: +5511999999999) — chave natural única
+  phoneNumber String   @unique @db.VarChar(20)
+
+  /// Nome do usuário (opcional — capturado durante onboarding)
+  name        String?  @db.VarChar(120)
+
+  /// Email opcional — usado se o usuário acessar o dashboard
+  email       String?  @unique @db.VarChar(255)
+
+  /// Timezone IANA (ex: America/Sao_Paulo) — inferido pelo DDI inicialmente
+  timezone    String   @default("America/Sao_Paulo") @db.VarChar(50)
+
+  /// Moeda padrão das transações (ISO 4217: BRL, USD, EUR)
+  currency    String   @default("BRL") @db.VarChar(3)
+
+  /// Idioma das respostas (ISO 639-1: pt, en, es)
+  language    String   @default("pt") @db.VarChar(5)
+
+  /// Configurações livres em JSON (notificações, preferências de UI, etc.)
+  settings    Json     @default("{}")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  // Relacionamentos
+  accounts          Account[]
+  categories        Category[]
+  transactions      Transaction[]
+  budgets           Budget[]
+  goals             Goal[]
+  insights          AIInsight[]
+  reports           Report[]
+  sessions          Session[]
+  userMerchants     Merchant[]
+  auditLogs         AuditLog[]
+  messageLogs       MessageLog[]
+
+  @@index([phoneNumber])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+// =============================================================================
+// ACCOUNTS — Contas financeiras
+// =============================================================================
+//
+// Cada usuário tem N contas. Uma conta "Principal" é criada automaticamente
+// no onboarding. No Sprint 1, o sistema usa apenas a Principal — múltiplas
+// contas se tornam relevantes no Sprint 4+.
+//
+model Account {
+  id          String      @id @default(cuid())
+  userId      String
+
+  name        String      @db.VarChar(80)
+  type        AccountType @default(CHECKING)
+
+  /// Nome do banco/instituição (Nubank, Itaú, Mercado Pago, etc.)
+  institution String?     @db.VarChar(80)
+
+  /// Cor para exibição no dashboard (hex sem #)
+  color       String?     @db.VarChar(6)
+
+  /// Conta padrão do usuário — recebe transações sem destino explícito
+  isDefault   Boolean     @default(false)
+
+  /// Saldo atual (calculado e cacheado — não é fonte de verdade)
+  /// A fonte de verdade é a soma das transações
+  cachedBalance Decimal   @default(0) @db.Decimal(15, 2)
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+
+  @@index([userId])
+  @@index([userId, isDefault])
+  @@index([deletedAt])
+  @@map("accounts")
+}
+
+// =============================================================================
+// CATEGORIES — Categorias de transação
+// =============================================================================
+//
+// Modelo híbrido:
+//   - SYSTEM categories: userId = null, criadas pelo seed, imutáveis
+//   - USER categories:   userId obrigatório, criadas pelo usuário
+//
+// Categorias do sistema (12 fixas):
+//   Alimentação, Transporte, Moradia, Saúde, Educação, Lazer,
+//   Assinaturas, Investimentos, Receitas, Impostos, Compras, Outros
+//
+model Category {
+  id          String          @id @default(cuid())
+
+  /// null = categoria do sistema; preenchido = categoria do usuário
+  userId      String?
+
+  origin      CategoryOrigin  @default(USER)
+
+  name        String          @db.VarChar(60)
+
+  /// Slug normalizado para lookup interno (ex: "alimentacao")
+  slug        String          @db.VarChar(60)
+
+  /// Ícone (nome do ícone Lucide ou Material — usado no frontend)
+  icon        String?         @db.VarChar(40)
+
+  /// Cor de exibição (hex sem #)
+  color       String?         @db.VarChar(6)
+
+  /// Tipo de transação ao qual esta categoria se aplica
+  /// null = aplicável a qualquer tipo
+  applicableTo TransactionType?
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  deletedAt   DateTime?
+
+  user          User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions  Transaction[]
+  budgets       Budget[]
+  merchants     Merchant[]
+
+  // userId + slug deve ser único (um usuário não pode ter duas "Alimentação")
+  // userId = null + slug também único (uma categoria SYSTEM por slug)
+  @@unique([userId, slug])
+  @@index([userId])
+  @@index([origin])
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("categories")
+}
+
+// =============================================================================
+// MERCHANTS — Base de conhecimento de estabelecimentos
+// =============================================================================
+//
+// Dois tipos de merchants:
+//   - Global (userId = null): seed inicial com ~50 merchants conhecidos
+//                              (Uber, iFood, Netflix, Nubank, etc.)
+//   - User (userId preenchido): aprendidos por correções do usuário
+//                                  ("Padaria do João" → Alimentação)
+//
+// Lookup do parser: busca primeiro nos merchants do usuário, depois nos globais.
+//
+model Merchant {
+  id          String   @id @default(cuid())
+
+  /// null = global (compartilhado entre todos os usuários)
+  userId      String?
+
+  /// Nome canônico (ex: "Uber")
+  name        String   @db.VarChar(80)
+
+  /// Slug normalizado para fuzzy match (ex: "uber", "ifood", "mc donalds" → "mcdonalds")
+  slug        String   @db.VarChar(80)
+
+  /// Aliases para match adicional (ex: ["uber eats", "ubereats"])
+  aliases     String[] @default([])
+
+  /// Categoria padrão associada
+  categoryId  String
+
+  /// Tipo padrão de transação (geralmente EXPENSE)
+  defaultType TransactionType @default(EXPENSE)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  // Mesmo slug pode existir para múltiplos usuários (user merchants)
+  // mas slug global é único quando userId = null
+  @@unique([userId, slug])
+  @@index([userId])
+  @@index([slug])
+  @@map("merchants")
+}
+
+// =============================================================================
+// TRANSACTIONS — Coração do sistema
+// =============================================================================
+//
+// Toda movimentação financeira é uma Transaction.
+// Investimentos têm campos opcionais extras — não criamos tabela separada
+// para reduzir JOINs em queries de relatório.
+//
+model Transaction {
+  id          String            @id @default(cuid())
+  userId      String
+  accountId   String
+  categoryId  String
+
+  type        TransactionType
+  source      TransactionSource @default(WHATSAPP)
+
+  /// Valor SEMPRE positivo. O sinal (entrada/saída) é dado pelo `type`.
+  amount      Decimal           @db.Decimal(15, 2)
+
+  /// Moeda ISO 4217 (BRL na maioria dos casos)
+  currency    String            @default("BRL") @db.VarChar(3)
+
+  /// Data efetiva da transação (timezone do usuário aplicado no display)
+  date        DateTime
+
+  /// Descrição livre (texto original da mensagem ou label customizado)
+  description String?           @db.VarChar(500)
+
+  /// Nome do estabelecimento (extraído ou informado)
+  merchantName String?          @db.VarChar(120)
+
+  /// Texto original recebido via WhatsApp (auditoria do parser)
+  originalText String?          @db.VarChar(1000)
+
+  // ─── Auditoria do parser ────────────────────────────────────────────────
+  parseMethod   ParseMethod     @default(DETERMINISTIC)
+
+  /// Score 0.00-1.00 do parser determinístico (apenas se parseMethod = DETERMINISTIC ou HYBRID)
+  parseConfidence Decimal?      @db.Decimal(3, 2)
+
+  /// Flag para revisão posterior pelo usuário (confidence entre 0.65 e 0.85)
+  needsReview   Boolean         @default(false)
+
+  // ─── Campos específicos de investimento ──────────────────────────────────
+  /// Ticker do ativo (PETR4, BTCUSD, TESOURO-IPCA-2035) — opcional
+  investmentTicker     String?  @db.VarChar(20)
+
+  /// Quantidade de unidades (ações, cotas)
+  investmentQuantity   Decimal? @db.Decimal(20, 8)
+
+  /// Instituição da operação (XP, Inter, Binance)
+  investmentInstitution String? @db.VarChar(80)
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deletedAt   DateTime?
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  account     Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  // ─── Índices para queries comuns ──────────────────────────────────────────
+  // Listagens do dashboard
+  @@index([userId, date(sort: Desc)])
+  @@index([userId, accountId, date(sort: Desc)])
+  @@index([userId, categoryId, date(sort: Desc)])
+  @@index([userId, type, date(sort: Desc)])
+  @@index([userId, needsReview])
+  @@index([deletedAt])
+  @@map("transactions")
+}
+
+// =============================================================================
+// MESSAGE_LOGS — Auditoria de mensagens recebidas + idempotência
+// =============================================================================
+//
+// Cada mensagem recebida via WhatsApp gera um registro. Usos:
+//   1. Idempotência: detectar webhooks duplicados via providerMessageId
+//   2. Auditoria: ver histórico bruto do que foi recebido
+//   3. Debug: rastrear casos onde o parser falhou
+//
+// Idempotência também usa cache Redis (TTL 24h) para velocidade.
+// Esta tabela é a fonte de verdade de longo prazo.
+//
+model MessageLog {
+  id                  String   @id @default(cuid())
+  userId              String?
+
+  /// Provider que recebeu a mensagem
+  provider            String   @db.VarChar(20)  // 'evolution' | 'meta'
+
+  /// ID da mensagem no provider (chave de idempotência)
+  providerMessageId   String   @db.VarChar(120)
+
+  /// Número do remetente (E.164)
+  fromPhone           String   @db.VarChar(20)
+
+  /// Tipo da mensagem
+  messageType         String   @db.VarChar(20)  // 'text' | 'audio' | 'image' | 'document'
+
+  /// Conteúdo bruto do texto (null para tipos não-texto)
+  text                String?  @db.Text
+
+  /// URL de mídia, se aplicável
+  mediaUrl            String?  @db.Text
+
+  /// Resultado do processamento
+  processed           Boolean  @default(false)
+  processingError     String?  @db.Text
+
+  /// Transaction gerada (se a mensagem resultou em transação)
+  transactionId       String?
+
+  /// Timestamp da mensagem no provider (não confundir com createdAt)
+  providerTimestamp   DateTime
+
+  createdAt           DateTime @default(now())
+
+  user                User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerMessageId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([fromPhone, createdAt(sort: Desc)])
+  @@index([processed])
+  @@map("message_logs")
+}
+
+// =============================================================================
+// SESSIONS — Sessões web ativas (Sprint 3+)
+// =============================================================================
+//
+// Cada login web via magic link cria uma Session. JWTs apontam para uma Session
+// (campo `sub` do JWT = sessionId). Permite revogação granular sem invalidar
+// outros logins do mesmo usuário.
+//
+model Session {
+  id            String   @id @default(cuid())
+  userId        String
+
+  /// Refresh token atual (hash bcrypt — nunca armazenamos em plain text)
+  refreshTokenHash String @db.VarChar(255)
+
+  /// Metadados do device para a tela "sessões ativas"
+  userAgent     String?  @db.VarChar(500)
+  ipAddress     String?  @db.VarChar(45)  // IPv6 cabe em 45
+
+  /// Última atividade — atualizada a cada refresh
+  lastActiveAt  DateTime @default(now())
+
+  /// Expiração — quando o refresh token deixa de ser válido
+  expiresAt     DateTime
+
+  /// Revogada manualmente ou por rotação detectada
+  revokedAt     DateTime?
+  revokedReason String?  @db.VarChar(120)
+
+  createdAt     DateTime @default(now())
+
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// =============================================================================
+// BUDGETS — Orçamentos por categoria (Sprint 4+)
+// =============================================================================
+//
+model Budget {
+  id          String       @id @default(cuid())
+  userId      String
+  categoryId  String
+
+  /// Valor limite do orçamento
+  amount      Decimal      @db.Decimal(15, 2)
+  currency    String       @default("BRL") @db.VarChar(3)
+
+  period      BudgetPeriod @default(MONTHLY)
+
+  /// Data de início do orçamento (orçamento se repete pelo período)
+  startDate   DateTime
+
+  /// Threshold (%) que dispara alerta — ex: 0.80 = avisa em 80%
+  alertThreshold Decimal   @default(0.80) @db.Decimal(3, 2)
+
+  active      Boolean      @default(true)
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  deletedAt   DateTime?
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
+  @@index([userId, categoryId])
+  @@index([deletedAt])
+  @@map("budgets")
+}
+
+// =============================================================================
+// GOALS — Metas financeiras (Sprint 4+)
+// =============================================================================
+//
+model Goal {
+  id              String     @id @default(cuid())
+  userId          String
+
+  name            String     @db.VarChar(120)
+  description     String?    @db.VarChar(500)
+
+  /// Valor alvo da meta
+  targetAmount    Decimal    @db.Decimal(15, 2)
+  currency        String     @default("BRL") @db.VarChar(3)
+
+  /// Progresso atual (atualizado conforme depósitos)
+  currentAmount   Decimal    @default(0) @db.Decimal(15, 2)
+
+  /// Data limite (opcional)
+  deadline        DateTime?
+
+  /// Categoria associada (opcional) — meta de gastar menos em uma categoria
+  categoryId      String?
+
+  status          GoalStatus @default(ACTIVE)
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([deletedAt])
+  @@map("goals")
+}
+
+// =============================================================================
+// AI_INSIGHTS — Insights gerados pelo sistema (Sprint 4+)
+// =============================================================================
+//
+// Insights podem ser gerados de duas formas:
+//   - Determinísticos: regras locais (ex: "gasto > 20% que mês anterior")
+//   - Claude: análises narrativas (ex: "padrão atípico de gastos noturnos")
+//
+model AIInsight {
+  id          String      @id @default(cuid())
+  userId      String
+
+  type        InsightType
+  title       String      @db.VarChar(200)
+
+  /// Corpo do insight em texto
+  body        String      @db.Text
+
+  /// Dados estruturados que originaram o insight (JSON)
+  /// Ex: { previousMonth: 1200, currentMonth: 1800, categoryId: 'xxx' }
+  data        Json        @default("{}")
+
+  /// Período de referência do insight
+  periodStart DateTime
+  periodEnd   DateTime
+
+  /// Foi gerado pelo Claude? (false = regra determinística)
+  aiGenerated Boolean     @default(false)
+
+  /// Modelo do Claude usado (claude-haiku-3, claude-sonnet-4)
+  aiModel     String?     @db.VarChar(40)
+
+  /// Usuário visualizou no dashboard?
+  seenAt      DateTime?
+
+  /// Usuário descartou (não quer ver mais este insight)
+  dismissedAt DateTime?
+
+  /// Enviado via WhatsApp?
+  notifiedAt  DateTime?
+
+  createdAt   DateTime    @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, seenAt])
+  @@index([userId, type])
+  @@map("ai_insights")
+}
+
+// =============================================================================
+// REPORTS — Relatórios gerados sob demanda (Sprint 4+)
+// =============================================================================
+//
+model Report {
+  id          String       @id @default(cuid())
+  userId      String
+
+  /// Tipo do relatório (ex: 'monthly_summary', 'category_breakdown')
+  reportType  String       @db.VarChar(40)
+
+  /// Período coberto pelo relatório
+  periodStart DateTime
+  periodEnd   DateTime
+
+  status      ReportStatus @default(PENDING)
+
+  /// Caminho do arquivo gerado (local ou URL S3)
+  filePath    String?      @db.Text
+
+  /// Formato (html, pdf, csv)
+  format      String       @db.VarChar(10)
+
+  /// Tamanho do arquivo em bytes
+  fileSize    Int?
+
+  /// Erro se status = FAILED
+  errorMessage String?     @db.Text
+
+  /// Quando o usuário baixou pela primeira vez
+  downloadedAt DateTime?
+
+  createdAt   DateTime     @default(now())
+  completedAt DateTime?
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("reports")
+}
+
+// =============================================================================
+// AUDIT_LOGS — Log de ações sensíveis
+// =============================================================================
+//
+// Registra ações que podem precisar ser auditadas: criação/edição de
+// transações, mudanças em sessões, geração de relatórios, etc.
+//
+// Não tem soft delete — é append-only.
+//
+model AuditLog {
+  id          String      @id @default(cuid())
+  userId      String?
+
+  action      AuditAction
+
+  /// Tipo do recurso afetado (ex: 'transaction', 'session')
+  resourceType String     @db.VarChar(40)
+
+  /// ID do recurso afetado
+  resourceId   String?    @db.VarChar(40)
+
+  /// Detalhes adicionais em JSON (estado antes/depois, contexto)
+  metadata    Json        @default("{}")
+
+  /// IP da origem da ação (se via web)
+  ipAddress   String?     @db.VarChar(45)
+
+  /// User-agent (se via web)
+  userAgent   String?     @db.VarChar(500)
+
+  createdAt   DateTime    @default(now())
+
+  user        User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([resourceType, resourceId])
+  @@map("audit_logs")
+}

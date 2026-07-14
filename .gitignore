@@ -1,0 +1,38 @@
+# Dependências
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Ambiente — SEGREDOS nunca vão para o repositório (todos os .env de qualquer
+# nível), exceto os templates .example. Cobre .env, .env.production, backend/.env…
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+
+# Testes
+coverage/
+.nyc_output/
+
+# Storage de runtime
+storage/
+
+# Docker volumes (caso alguém crie volumes locais)
+docker-data/

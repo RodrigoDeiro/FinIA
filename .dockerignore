@@ -1,0 +1,23 @@
+# Node
+**/node_modules
+**/dist
+**/coverage
+**/.vite
+
+# Ambiente / segredos (NUNCA vão para a imagem)
+**/.env
+**/.env.*
+!**/.env.example
+
+# Storage de runtime (relatórios gerados) — NÃO confundir com src/shared/storage!
+# Padrão ancorado: exclui só backend/storage, não o código-fonte.
+/backend/storage
+/frontend/dist
+/storage
+
+# Dev tooling
+**/.git
+**/.github
+**/*.log
+**/.DS_Store
+**/tmp

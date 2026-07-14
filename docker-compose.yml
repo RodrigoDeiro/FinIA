@@ -1,0 +1,199 @@
+version: '3.9'
+
+# =============================================================================
+# FinIA — Docker Compose (Desenvolvimento)
+# =============================================================================
+# Serviços:
+#   postgres        → banco de dados principal (porta 5432)
+#   redis           → cache, filas e sessões (porta 6379)
+#   backend         → API Fastify com hot reload (porta 3000)
+#   pgadmin         → UI do PostgreSQL — dev only (porta 5050)
+#   redis-commander → UI do Redis — dev only (porta 8081)
+#
+# Bull Board (monitoramento de filas) é servido pelo próprio backend em:
+#   http://localhost:3000/admin/queues
+#
+# Uso:
+#   docker-compose up -d              → sobe todos os serviços
+#   docker-compose up -d postgres redis → sobe só a infra (backend local)
+#   docker-compose logs -f backend    → acompanha logs do backend
+#   docker-compose down -v            → derruba e remove volumes
+# =============================================================================
+
+services:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # PostgreSQL 16
+  # ───────────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: finia_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB}
+      # Otimizações para desenvolvimento
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=en_US.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - finia-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Redis 7
+  # ───────────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: finia_redis
+    restart: unless-stopped
+    # appendonly yes  → persistência em disco (sobrevive a restart)
+    # maxmemory       → limite de 256mb em dev (evita consumo irrestrito)
+    # maxmemory-policy noeviction → exigido pelo BullMQ: com allkeys-lru o Redis
+    #   poderia descartar JOBS DE FILA silenciosamente sob pressão de memória.
+    #   Com noeviction, escritas falham alto quando cheio (erro visível > perda muda).
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - finia-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Backend — Fastify + TypeScript
+  # ───────────────────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: finia_backend
+    restart: unless-stopped
+    # env_file carrega todas as variáveis do .env
+    # environment sobrescreve DATABASE_URL e REDIS_URL para usar os nomes
+    # dos serviços Docker no lugar de localhost
+    env_file:
+      - .env
+    environment:
+      NODE_ENV:     ${NODE_ENV:-development}
+      PORT:         ${PORT:-3000}
+      LOG_LEVEL:    ${LOG_LEVEL:-debug}
+      # Sobrescreve o host para o nome do serviço Docker (não localhost)
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
+      REDIS_URL:    "redis://:${REDIS_PASSWORD}@redis:6379"
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      # Monta o código-fonte para hot reload via tsx watch
+      - ./backend:/app
+      # Volume nomeado para node_modules: evita que a pasta do host
+      # sobrescreva a do container (especialmente crítico no Windows/Mac)
+      - backend_node_modules:/app/node_modules
+    networks:
+      - finia-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # pgAdmin 4 — UI do PostgreSQL (somente desenvolvimento)
+  # ───────────────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: finia_pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL:    ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      # Desativa login no pgAdmin (modo desktop — sem autenticação extra em dev)
+      PGADMIN_CONFIG_SERVER_MODE:           'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - finia-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Redis Commander — UI do Redis (somente desenvolvimento)
+  # ───────────────────────────────────────────────────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: finia_redis_commander
+    restart: unless-stopped
+    environment:
+      # Formato: label:host:porta:db:senha
+      REDIS_HOSTS: "local:redis:6379:0:${REDIS_PASSWORD}"
+      # Autenticação HTTP básica para acessar a UI
+      HTTP_USER:     ${REDIS_COMMANDER_USER:-admin}
+      HTTP_PASSWORD: ${REDIS_COMMANDER_PASSWORD:-admin}
+    ports:
+      - "8081:8081"
+    networks:
+      - finia-network
+    depends_on:
+      redis:
+        condition: service_healthy
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  # Dados do PostgreSQL — persistidos entre restarts
+  postgres_data:
+    driver: local
+
+  # Dados do Redis (appendonly) — persistidos entre restarts
+  redis_data:
+    driver: local
+
+  # Configurações e sessões do pgAdmin
+  pgadmin_data:
+    driver: local
+
+  # node_modules do backend — isolado do host para evitar conflitos
+  # de plataforma (binários nativos compilados para linux/arm64)
+  backend_node_modules:
+    driver: local
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  finia-network:
+    driver: bridge
+    # Todos os serviços se comunicam por nome de serviço:
+    # postgres → postgres:5432
+    # redis    → redis:6379
+    # backend  → backend:3000
