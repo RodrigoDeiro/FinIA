@@ -31,8 +31,10 @@ Thumbs.db
 coverage/
 .nyc_output/
 
-# Storage de runtime
-storage/
+# Storage de runtime (relatórios gerados) — NÃO usar "storage/" solto:
+# isso casava também com src/shared/storage/ (código-fonte) e o excluía do repo.
+/storage/
+/backend/storage/
 
 # Docker volumes (caso alguém crie volumes locais)
 docker-data/
