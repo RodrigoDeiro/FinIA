@@ -41,19 +41,19 @@ export function Reports() {
               const st = STATUS[r.status]
               const processing = r.status === 'PENDING' || r.status === 'GENERATING'
               return (
-                <div key={r.id} className="flex items-center justify-between py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+                <div key={r.id} className="flex items-center justify-between gap-3 py-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
                       {processing ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileText className="h-5 w-5" />}
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-slate-700">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-700">
                         Relatório de {formatDate(r.periodStart, 'MMMM/YYYY')}
                       </p>
-                      <p className="text-xs text-slate-400">Criado em {formatDateTime(r.createdAt)}</p>
+                      <p className="truncate text-xs text-slate-400">Criado em {formatDateTime(r.createdAt)}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex shrink-0 items-center gap-2">
                     <Badge tone={st.tone}>{st.label}</Badge>
                     {r.status === 'COMPLETED' && (
                       <a

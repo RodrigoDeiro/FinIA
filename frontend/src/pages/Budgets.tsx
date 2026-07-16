@@ -17,7 +17,7 @@ export function Budgets() {
     <>
       <PageHeader
         title="Orçamentos"
-        subtitle="Defina limites e receba alertas no WhatsApp"
+        subtitle="Defina limites de gasto por categoria e acompanhe"
         action={
           <Button onClick={() => setCreating(true)}>
             <Plus className="h-4 w-4" /> Novo
@@ -32,7 +32,7 @@ export function Budgets() {
           <EmptyState
             icon={<Wallet className="h-8 w-8" />}
             title="Nenhum orçamento"
-            hint="Crie um limite por categoria e o FinIA te avisa ao chegar perto."
+            hint="Crie um limite por categoria e acompanhe quanto já gastou."
           />
         </Card>
       ) : (
