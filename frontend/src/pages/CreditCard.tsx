@@ -10,7 +10,7 @@ import {
   usePayInstallment,
   useUnpayInstallment,
 } from '@/hooks/useApi'
-import { formatMoney } from '@/lib/format'
+import { formatMoney, formatDate } from '@/lib/format'
 import type { CreditPurchase } from '@/types/api'
 
 export function CreditCard() {
@@ -113,7 +113,10 @@ function PurchaseCard({ purchase: p }: { purchase: CreditPurchase }) {
       </div>
 
       {!done && (
-        <p className="mt-1 text-xs text-slate-400">Restam {formatMoney(p.remainingAmount)}</p>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 text-xs text-slate-400">
+          <span>Restam {formatMoney(p.remainingAmount)}</span>
+          {p.nextDueDate && <span>Próxima: {formatDate(p.nextDueDate)}</span>}
+        </div>
       )}
 
       <div className="mt-3 flex gap-2">

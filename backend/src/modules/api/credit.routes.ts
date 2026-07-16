@@ -26,6 +26,12 @@ const createBody = z.object({
 
 const round2 = (n: number): number => Math.round(n * 100) / 100
 
+function addMonths(date: Date, n: number): Date {
+  const d = new Date(date)
+  d.setMonth(d.getMonth() + n)
+  return d
+}
+
 function compute(cp: CreditPurchase) {
   const total = Number(cp.totalAmount)
   const installmentAmount = round2(total / cp.installments)
@@ -33,6 +39,10 @@ function compute(cp: CreditPurchase) {
   // Parcelas pagas: controle MANUAL (o usuário marca com "Paguei").
   const paidCount = Math.max(0, Math.min(cp.installments, cp.paidInstallments))
   const remainingCount = cp.installments - paidCount
+
+  // Data da próxima parcela: 1ª parcela = firstDueDate (mês 0); a parcela
+  // (paidCount+1) cai `paidCount` meses depois. Null se já quitada.
+  const nextDueDate = remainingCount > 0 ? addMonths(cp.firstDueDate, paidCount) : null
 
   const paidAmount = remainingCount === 0 ? total : round2(paidCount * installmentAmount)
   const remainingAmount = remainingCount === 0 ? 0 : round2(total - paidAmount)
@@ -44,6 +54,7 @@ function compute(cp: CreditPurchase) {
     totalAmount: total,
     installments: cp.installments,
     firstDueDate: cp.firstDueDate,
+    nextDueDate,
     installmentAmount,
     paidCount,
     remainingCount,

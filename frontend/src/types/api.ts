@@ -44,6 +44,7 @@ export interface CreditPurchase {
   totalAmount: number
   installments: number
   firstDueDate: string
+  nextDueDate: string | null
   installmentAmount: number
   paidCount: number
   remainingCount: number
