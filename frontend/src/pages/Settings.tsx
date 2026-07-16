@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
+import { X } from 'lucide-react'
 import { PageHeader } from '@/components/Layout'
-import { Card, Spinner, Badge } from '@/components/ui'
-import { useMe } from '@/hooks/useApi'
+import { Card, Spinner, Badge, Button } from '@/components/ui'
+import { useMe, useCategories, useCreateCategory, useDeleteCategory } from '@/hooks/useApi'
 import { formatDate } from '@/lib/format'
 import { api, ApiError } from '@/lib/api'
 
@@ -86,6 +87,84 @@ function PasswordCard({ currentEmail }: { currentEmail: string | null }) {
   )
 }
 
+function CategoriesCard() {
+  const { data: categories } = useCategories()
+  const create = useCreateCategory()
+  const del = useDeleteCategory()
+  const [name, setName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  async function add(e: FormEvent) {
+    e.preventDefault()
+    setError(null)
+    const n = name.trim()
+    if (!n) return
+    try {
+      await create.mutateAsync(n)
+      setName('')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Não foi possível criar.')
+    }
+  }
+
+  const userCats = categories?.filter((c) => c.origin === 'USER') ?? []
+  const systemCats = categories?.filter((c) => c.origin === 'SYSTEM') ?? []
+
+  return (
+    <Card>
+      <h3 className="mb-1 font-semibold text-slate-700">Categorias</h3>
+      <p className="mb-3 text-xs text-slate-400">
+        Crie as suas e remova as que não usa. As padrão ficam sempre disponíveis.
+      </p>
+
+      <form onSubmit={add} className="mb-3 flex gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Nova categoria (ex: Pets)"
+          maxLength={60}
+          className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+        />
+        <Button type="submit" loading={create.isPending}>
+          Adicionar
+        </Button>
+      </form>
+      {error && <p className="mb-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
+
+      {userCats.length > 0 ? (
+        <div className="mb-3 flex flex-wrap gap-2">
+          {userCats.map((c) => (
+            <span
+              key={c.id}
+              className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-700"
+            >
+              {c.name}
+              <button
+                onClick={() => del.mutate(c.id)}
+                aria-label={`Remover ${c.name}`}
+                className="rounded-full p-0.5 hover:bg-brand-100"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <p className="mb-3 text-xs text-slate-400">Você ainda não criou categorias próprias.</p>
+      )}
+
+      <p className="mb-1 text-xs text-slate-400">Categorias padrão</p>
+      <div className="flex flex-wrap gap-2">
+        {systemCats.map((c) => (
+          <span key={c.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
+            {c.name}
+          </span>
+        ))}
+      </div>
+    </Card>
+  )
+}
+
 export function Settings() {
   const { data, isLoading } = useMe()
 
@@ -124,6 +203,8 @@ export function Settings() {
         </Card>
 
         <PasswordCard currentEmail={user.email ?? null} />
+
+        <CategoriesCard />
       </div>
 
       <p className="mt-6 text-center text-xs text-slate-400">

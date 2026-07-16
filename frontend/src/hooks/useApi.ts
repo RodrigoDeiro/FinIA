@@ -34,6 +34,25 @@ export function useCategories() {
   })
 }
 
+export function useCreateCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (name: string) => api.post<{ category: Category }>('/categories', { name }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['categories'] }),
+  })
+}
+
+export function useDeleteCategory() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.del<void>(`/categories/${id}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['categories'] })
+      void qc.invalidateQueries({ queryKey: ['transactions'] })
+    },
+  })
+}
+
 export function useSummary() {
   return useQuery({ queryKey: ['summary'], queryFn: () => api.get<Summary>('/summary') })
 }

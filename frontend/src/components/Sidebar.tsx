@@ -4,7 +4,6 @@ import {
   Receipt,
   Wallet,
   Target,
-  Lightbulb,
   FileText,
   Settings,
   LogOut,
@@ -18,7 +17,6 @@ const NAV = [
   { to: '/transacoes', label: 'Transações', icon: Receipt },
   { to: '/orcamentos', label: 'Orçamentos', icon: Wallet },
   { to: '/metas', label: 'Metas', icon: Target },
-  { to: '/insights', label: 'Insights', icon: Lightbulb },
   { to: '/relatorios', label: 'Relatórios', icon: FileText },
   { to: '/configuracoes', label: 'Configurações', icon: Settings },
 ]

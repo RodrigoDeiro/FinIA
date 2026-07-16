@@ -7,7 +7,6 @@ import { Dashboard } from '@/pages/Dashboard'
 import { Transactions } from '@/pages/Transactions'
 import { Budgets } from '@/pages/Budgets'
 import { Goals } from '@/pages/Goals'
-import { Insights } from '@/pages/Insights'
 import { Reports } from '@/pages/Reports'
 import { Settings } from '@/pages/Settings'
 
@@ -33,7 +32,6 @@ export function App() {
           <Route path="transacoes" element={<Transactions />} />
           <Route path="orcamentos" element={<Budgets />} />
           <Route path="metas" element={<Goals />} />
-          <Route path="insights" element={<Insights />} />
           <Route path="relatorios" element={<Reports />} />
           <Route path="configuracoes" element={<Settings />} />
         </Route>

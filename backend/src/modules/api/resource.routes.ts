@@ -1,7 +1,16 @@
 import type { FastifyInstance } from 'fastify'
+import { z } from 'zod'
 import { prisma } from '@database/prisma.js'
 import { tenantPrisma } from '@database/tenant.prisma.js'
 import { buildFinancialSnapshot } from '@modules/ai/context.builder.js'
+import { normalizeText } from '@shared/utils/text.util.js'
+
+const createCategoryBody = z.object({ name: z.string().trim().min(1).max(60) })
+
+function toSlug(name: string): string {
+  const slug = normalizeText(name).replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+  return slug.slice(0, 60) || 'categoria'
+}
 
 // =============================================================================
 // FinIA — Rotas de recursos (/api/v1)
@@ -78,6 +87,42 @@ export async function resourceRoutes(app: FastifyInstance): Promise<void> {
       },
     })
     return { categories }
+  })
+
+  // ─── POST /categories — cria uma categoria do usuário ──────────────────────
+  app.post('/categories', async (request, reply) => {
+    const userId = request.auth!.userId
+    const parsed = createCategoryBody.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'Informe um nome válido' } })
+    }
+    const name = parsed.data.name.trim()
+    try {
+      const category = await prisma.category.create({
+        data: { userId, origin: 'USER', name, slug: toSlug(name) },
+        select: { id: true, name: true, slug: true, icon: true, color: true, origin: true, applicableTo: true },
+      })
+      return reply.code(201).send({ category })
+    } catch {
+      // Colisão de unique [userId, slug]
+      return reply.code(409).send({ error: { code: 'CATEGORY_EXISTS', message: 'Você já tem uma categoria com esse nome' } })
+    }
+  })
+
+  // ─── DELETE /categories/:id — remove (soft) uma categoria do usuário ────────
+  // Só categorias do PRÓPRIO usuário (origin USER). As do sistema são fixas.
+  app.delete('/categories/:id', async (request, reply) => {
+    const userId = request.auth!.userId
+    const { id } = request.params as { id: string }
+    const cat = await prisma.category.findFirst({
+      where: { id, userId, origin: 'USER', deletedAt: null },
+      select: { id: true },
+    })
+    if (!cat) {
+      return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Categoria não encontrada' } })
+    }
+    await prisma.category.update({ where: { id }, data: { deletedAt: new Date() } })
+    return reply.code(204).send()
   })
 
   // ─── GET /summary — visão do mês para o dashboard ──────────────────────────
