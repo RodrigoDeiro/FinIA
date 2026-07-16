@@ -97,7 +97,7 @@ export function Transactions() {
         {isLoading ? (
           <Spinner label="Carregando…" />
         ) : !data || data.items.length === 0 ? (
-          <EmptyState title="Nenhuma transação" hint="Registre um gasto pelo WhatsApp ou clique em Nova." />
+          <EmptyState title="Nenhuma transação" hint="Clique em “Nova” para registrar seu primeiro gasto." />
         ) : (
           <>
             <div className="divide-y divide-slate-100">
@@ -150,46 +150,51 @@ function TransactionRow({ tx }: { tx: Transaction }) {
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 py-3">
-      <div className="flex min-w-0 items-center gap-3">
-        <Badge tone={isIncome ? 'green' : 'slate'}>{tx.categoryName ?? 'Outros'}</Badge>
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-slate-700">
-            {tx.merchantName ?? tx.description ?? TYPE_LABEL[tx.type]}
-          </p>
-          <p className="flex items-center gap-2 text-xs text-slate-400">
-            {formatDate(tx.date)}
-            <Badge tone={method.tone}>
-              {tx.parseMethod === 'AI' && <Sparkles className="mr-0.5 inline h-3 w-3" />}
-              {method.label}
-            </Badge>
-            {tx.needsReview && (
-              <span className="inline-flex items-center gap-1 text-amber-600">
-                <AlertCircle className="h-3 w-3" /> revisar
-              </span>
-            )}
-          </p>
+    <div className="flex items-start justify-between gap-3 py-3">
+      {/* Coluna principal: descrição + detalhes (categoria, data, status) */}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-slate-700">
+          {tx.merchantName ?? tx.description ?? TYPE_LABEL[tx.type]}
+        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
+          <Badge tone={isIncome ? 'green' : 'slate'}>{tx.categoryName ?? 'Outros'}</Badge>
+          <span>{formatDate(tx.date)}</span>
+          <Badge tone={method.tone}>
+            {tx.parseMethod === 'AI' && <Sparkles className="mr-0.5 inline h-3 w-3" />}
+            {method.label}
+          </Badge>
+          {tx.needsReview && (
+            <span className="inline-flex items-center gap-1 text-amber-600">
+              <AlertCircle className="h-3 w-3" /> revisar
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <span className={`whitespace-nowrap font-semibold ${isIncome ? 'text-brand-600' : 'text-slate-800'}`}>
+      {/* Coluna à direita: valor em cima, ações embaixo */}
+      <div className="flex shrink-0 flex-col items-end gap-1">
+        <span
+          className={`whitespace-nowrap text-sm font-semibold ${isIncome ? 'text-brand-600' : 'text-slate-800'}`}
+        >
           {isIncome ? '+' : '−'}
           {formatMoney(tx.amount, tx.currency)}
         </span>
-        <button
-          onClick={() => setEditing((v) => !v)}
-          className="rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
-        >
-          Corrigir
-        </button>
-        <button
-          onClick={() => del.mutate(tx.id)}
-          className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
-          title="Excluir"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setEditing((v) => !v)}
+            className="rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
+          >
+            Corrigir
+          </button>
+          <button
+            onClick={() => del.mutate(tx.id)}
+            className="rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-500"
+            title="Excluir"
+            aria-label="Excluir"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {editing && (
