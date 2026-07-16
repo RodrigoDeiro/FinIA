@@ -37,6 +37,27 @@ export interface Category {
   applicableTo: TransactionType | null
 }
 
+export interface CreditPurchase {
+  id: string
+  description: string
+  card: string | null
+  totalAmount: number
+  installments: number
+  firstDueDate: string
+  installmentAmount: number
+  paidCount: number
+  remainingCount: number
+  paidAmount: number
+  remainingAmount: number
+  progress: number
+}
+
+export interface CreditSummary {
+  monthlyCommitment: number
+  totalRemaining: number
+  activeCount: number
+}
+
 export interface Transaction {
   id: string
   type: TransactionType

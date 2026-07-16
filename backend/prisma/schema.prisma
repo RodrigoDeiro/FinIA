@@ -171,10 +171,48 @@ model User {
   userMerchants     Merchant[]
   auditLogs         AuditLog[]
   messageLogs       MessageLog[]
+  creditPurchases   CreditPurchase[]
 
   @@index([phoneNumber])
   @@index([deletedAt])
   @@map("users")
+}
+
+// =============================================================================
+// CREDIT_PURCHASES — Compras no cartão de crédito (parceladas)
+// =============================================================================
+//
+// Registra uma compra parcelada. As parcelas NÃO são linhas separadas: o
+// progresso (quantas pagas / faltam / valor mensal) é calculado a partir de
+// firstDueDate + installments no momento da consulta.
+//
+model CreditPurchase {
+  id           String    @id @default(cuid())
+  userId       String
+
+  /// Descrição da compra (ex: "Geladeira Brastemp")
+  description  String    @db.VarChar(200)
+
+  /// Valor TOTAL da compra (soma de todas as parcelas)
+  totalAmount  Decimal   @db.Decimal(15, 2)
+
+  /// Número de parcelas (ex: 6 = "6x")
+  installments Int
+
+  /// Data da 1ª parcela (define o mês de referência do acompanhamento)
+  firstDueDate DateTime
+
+  /// Apelido do cartão (opcional, ex: "Nubank")
+  card         String?   @db.VarChar(60)
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, deletedAt])
+  @@map("credit_purchases")
 }
 
 // =============================================================================

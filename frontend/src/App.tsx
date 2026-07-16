@@ -5,6 +5,7 @@ import { Register } from '@/pages/Register'
 import { MagicLogin } from '@/pages/MagicLogin'
 import { Dashboard } from '@/pages/Dashboard'
 import { Transactions } from '@/pages/Transactions'
+import { CreditCard } from '@/pages/CreditCard'
 import { Budgets } from '@/pages/Budgets'
 import { Goals } from '@/pages/Goals'
 import { Reports } from '@/pages/Reports'
@@ -30,6 +31,7 @@ export function App() {
         <Route element={<Layout />}>
           <Route index element={<Dashboard />} />
           <Route path="transacoes" element={<Transactions />} />
+          <Route path="cartao" element={<CreditCard />} />
           <Route path="orcamentos" element={<Budgets />} />
           <Route path="metas" element={<Goals />} />
           <Route path="relatorios" element={<Reports />} />

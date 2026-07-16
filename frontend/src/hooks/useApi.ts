@@ -4,6 +4,8 @@ import type {
   Account,
   Budget,
   Category,
+  CreditPurchase,
+  CreditSummary,
   Goal,
   Insight,
   Report,
@@ -12,6 +14,18 @@ import type {
   TransactionPage,
   User,
 } from '@/types/api'
+
+interface CreditData {
+  purchases: CreditPurchase[]
+  summary: CreditSummary
+}
+interface NewCreditPurchase {
+  description: string
+  totalAmount: number
+  installments: number
+  firstDueDate: string
+  card: string | null
+}
 
 // =============================================================================
 // FinIA — Hooks de dados (TanStack Query)
@@ -224,4 +238,28 @@ function invalidateFinance(qc: ReturnType<typeof useQueryClient>): void {
   void qc.invalidateQueries({ queryKey: ['transactions'] })
   void qc.invalidateQueries({ queryKey: ['summary'] })
   void qc.invalidateQueries({ queryKey: ['budgets'] })
+}
+
+// ─── Cartão de crédito ────────────────────────────────────────────────────────
+export function useCreditPurchases() {
+  return useQuery({
+    queryKey: ['credit-purchases'],
+    queryFn: () => api.get<CreditData>('/credit-purchases'),
+  })
+}
+
+export function useCreateCreditPurchase() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: NewCreditPurchase) => api.post<{ purchase: CreditPurchase }>('/credit-purchases', data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['credit-purchases'] }),
+  })
+}
+
+export function useDeleteCreditPurchase() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.del<void>(`/credit-purchases/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['credit-purchases'] }),
+  })
 }
