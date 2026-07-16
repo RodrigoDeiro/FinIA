@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
+import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { Spinner } from './ui'
 import { useMe } from '@/hooks/useApi'
@@ -20,6 +21,7 @@ import { useRealtime } from '@/hooks/useRealtime'
 export function Layout() {
   const navigate = useNavigate()
   const { data, isLoading, isError } = useMe()
+  const [navOpen, setNavOpen] = useState(false)
 
   useRealtime(Boolean(data))
 
@@ -45,12 +47,28 @@ export function Layout() {
 
   return (
     <div className="flex h-full">
-      <Sidebar userName={data.user.name} />
-      <main className="scrollbar-thin flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-5xl px-8 py-8">
-          <Outlet />
-        </div>
-      </main>
+      <Sidebar userName={data.user.name} open={navOpen} onClose={() => setNavOpen(false)} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Barra superior — só no mobile */}
+        <header className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3 md:hidden">
+          <button
+            onClick={() => setNavOpen(true)}
+            aria-label="Abrir menu"
+            className="rounded-lg p-1 text-slate-600 hover:bg-slate-100"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
+          <span className="text-xl font-bold text-slate-800">
+            Fin<span className="text-brand-500">IA</span>
+          </span>
+        </header>
+
+        <main className="scrollbar-thin flex-1 overflow-y-auto">
+          <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   )
 }
