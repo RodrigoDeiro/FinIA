@@ -5,6 +5,7 @@ import { env } from '@config/env.js'
 import { AUTH_COOKIES } from '@config/constants.js'
 import { parseDurationMs } from '@shared/utils/duration.util.js'
 import { consumeMagicLink } from './magic-link.service.js'
+import { hashPassword, verifyPassword } from '@shared/utils/password.util.js'
 import {
   createSession,
   verifyAndRotate,
@@ -29,6 +30,11 @@ import { setAuthCookies, clearAuthCookies } from './auth.cookies.js'
 // =============================================================================
 
 const magicBodySchema = z.object({ token: z.string().min(32) })
+const loginBodySchema = z.object({ email: z.string().email(), password: z.string().min(1) })
+const setPasswordBodySchema = z.object({
+  email: z.string().email().optional(),
+  password: z.string().min(8, 'A senha deve ter ao menos 8 caracteres'),
+})
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   const accessTtlMs = parseDurationMs(env.JWT_EXPIRES_IN)
@@ -63,6 +69,53 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(200).send({
       user: { id: user.id, name: user.name, phoneNumber: user.phoneNumber, currency: user.currency, timezone: user.timezone },
     })
+  })
+
+  // ─── POST /login — login por email + senha ─────────────────────────────────
+  app.post('/login', async (request, reply) => {
+    const parsed = loginBodySchema.safeParse(request.body)
+    // Falha genérica: não revela se o problema é email ou senha (info p/ atacante)
+    const fail = () =>
+      reply.code(401).send({ error: { code: 'INVALID_CREDENTIALS', message: 'Email ou senha inválidos' } })
+    if (!parsed.success) return fail()
+
+    const email = parsed.data.email.toLowerCase().trim()
+    const user = await prisma.user.findFirst({ where: { email, deletedAt: null } })
+    if (!user?.passwordHash || !verifyPassword(parsed.data.password, user.passwordHash)) {
+      return fail()
+    }
+
+    const { session, refreshToken } = await createSession(user.id, {
+      userAgent: request.headers['user-agent'],
+      ipAddress: request.ip,
+    })
+    setAuthCookies(reply, signAccessToken(session.id, user.id), refreshToken)
+    return reply.code(200).send({
+      user: { id: user.id, name: user.name, phoneNumber: user.phoneNumber, currency: user.currency, timezone: user.timezone },
+    })
+  })
+
+  // ─── POST /set-password — define/atualiza a senha (e opcionalmente o email) ──
+  app.post('/set-password', { preHandler: [app.authenticate] }, async (request, reply) => {
+    const parsed = setPasswordBodySchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Dados inválidos' },
+      })
+    }
+
+    const data: { passwordHash: string; email?: string } = {
+      passwordHash: hashPassword(parsed.data.password),
+    }
+    if (parsed.data.email) data.email = parsed.data.email.toLowerCase().trim()
+
+    try {
+      await prisma.user.update({ where: { id: request.auth!.userId }, data })
+    } catch {
+      // Violação de unique no email
+      return reply.code(409).send({ error: { code: 'EMAIL_TAKEN', message: 'Esse email já está em uso' } })
+    }
+    return reply.code(204).send()
   })
 
   // ─── POST /refresh — rotação do refresh token ──────────────────────────────

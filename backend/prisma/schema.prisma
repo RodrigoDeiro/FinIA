@@ -138,6 +138,10 @@ model User {
   /// Email opcional — usado se o usuário acessar o dashboard
   email       String?  @unique @db.VarChar(255)
 
+  /// Hash da senha (scrypt) para login web por email+senha. Null = sem senha
+  /// definida (usuário só acessa via magic link). Ver auth/password login.
+  passwordHash String? @db.VarChar(255)
+
   /// Timezone IANA (ex: America/Sao_Paulo) — inferido pelo DDI inicialmente
   timezone    String   @default("America/Sao_Paulo") @db.VarChar(50)
 
