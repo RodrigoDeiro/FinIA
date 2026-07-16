@@ -67,11 +67,14 @@ async function onTransactionCreated(payload: TransactionEventPayload): Promise<v
       })
       const categoryName = category?.name ?? 'Categoria'
 
-      await notificationService.sendText(
-        user.phoneNumber,
-        budgetAlertTemplate(categoryName, status.spent, status.limit, status.window.label, user.currency),
-        payload.userId,
-      )
+      // Notificação por WhatsApp: só se o usuário tiver telefone (cadastro web não tem)
+      if (user.phoneNumber) {
+        await notificationService.sendText(
+          user.phoneNumber,
+          budgetAlertTemplate(categoryName, status.spent, status.limit, status.window.label, user.currency),
+          payload.userId,
+        )
+      }
 
       await prisma.aIInsight.create({
         data: {

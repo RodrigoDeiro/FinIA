@@ -129,8 +129,9 @@ enum AuditAction {
 model User {
   id          String   @id @default(cuid())
 
-  /// Número em formato E.164 (ex: +5511999999999) — chave natural única
-  phoneNumber String   @unique @db.VarChar(20)
+  /// Número em formato E.164 (ex: +5511999999999). Opcional: usuários que se
+  /// cadastram pela web (email+senha) não têm telefone. Único quando presente.
+  phoneNumber String?  @unique @db.VarChar(20)
 
   /// Nome do usuário (opcional — capturado durante onboarding)
   name        String?  @db.VarChar(120)

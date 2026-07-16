@@ -73,7 +73,8 @@ export async function runInsightEngine(
   }
 
   // Resumo via WhatsApp apenas no cron (sob demanda o usuário já está no painel)
-  if (trigger === 'cron' && fresh.length > 0) {
+  // e apenas se o usuário tiver telefone (cadastro web não tem).
+  if (trigger === 'cron' && fresh.length > 0 && user.phoneNumber) {
     await notificationService.sendText(
       user.phoneNumber,
       insightsSummaryTemplate(fresh.slice(0, 3).map((c) => c.title)),

@@ -39,3 +39,29 @@ export async function createWithDefaultAccount(phoneNumber: string): Promise<Use
     include: { accounts: true },
   })
 }
+
+/**
+ * Onboarding pela WEB: cria o usuário (email + senha, sem telefone) já com a
+ * conta "Principal". Lança P2002 se o email já existir (tratado na rota).
+ */
+export async function createWebUser(params: {
+  name: string
+  email: string
+  passwordHash: string
+}): Promise<UserWithAccounts> {
+  return prisma.user.create({
+    data: {
+      name: params.name,
+      email: params.email,
+      passwordHash: params.passwordHash,
+      accounts: {
+        create: {
+          name: DEFAULT_ACCOUNT_NAME,
+          type: 'CHECKING',
+          isDefault: true,
+        },
+      },
+    },
+    include: { accounts: true },
+  })
+}

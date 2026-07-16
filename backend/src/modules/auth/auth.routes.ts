@@ -6,6 +6,7 @@ import { AUTH_COOKIES } from '@config/constants.js'
 import { parseDurationMs } from '@shared/utils/duration.util.js'
 import { consumeMagicLink } from './magic-link.service.js'
 import { hashPassword, verifyPassword } from '@shared/utils/password.util.js'
+import { createWebUser } from '@modules/user/user.repository.js'
 import {
   createSession,
   verifyAndRotate,
@@ -33,6 +34,11 @@ const magicBodySchema = z.object({ token: z.string().min(32) })
 const loginBodySchema = z.object({ email: z.string().email(), password: z.string().min(1) })
 const setPasswordBodySchema = z.object({
   email: z.string().email().optional(),
+  password: z.string().min(8, 'A senha deve ter ao menos 8 caracteres'),
+})
+const registerBodySchema = z.object({
+  name: z.string().trim().min(1, 'Informe seu nome').max(120),
+  email: z.string().email(),
   password: z.string().min(8, 'A senha deve ter ao menos 8 caracteres'),
 })
 
@@ -67,6 +73,38 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     setAuthCookies(reply, signAccessToken(session.id, userId), refreshToken)
     return reply.code(200).send({
+      user: { id: user.id, name: user.name, phoneNumber: user.phoneNumber, currency: user.currency, timezone: user.timezone },
+    })
+  })
+
+  // ─── POST /register — cadastro web (nome + email + senha) ──────────────────
+  app.post('/register', async (request, reply) => {
+    const parsed = registerBodySchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: { code: 'INVALID_INPUT', message: parsed.error.issues[0]?.message ?? 'Dados inválidos' },
+      })
+    }
+
+    const email = parsed.data.email.toLowerCase().trim()
+    let user
+    try {
+      user = await createWebUser({
+        name: parsed.data.name.trim(),
+        email,
+        passwordHash: hashPassword(parsed.data.password),
+      })
+    } catch {
+      // Violação de unique (email já cadastrado)
+      return reply.code(409).send({ error: { code: 'EMAIL_TAKEN', message: 'Esse email já está cadastrado' } })
+    }
+
+    const { session, refreshToken } = await createSession(user.id, {
+      userAgent: request.headers['user-agent'],
+      ipAddress: request.ip,
+    })
+    setAuthCookies(reply, signAccessToken(session.id, user.id), refreshToken)
+    return reply.code(201).send({
       user: { id: user.id, name: user.name, phoneNumber: user.phoneNumber, currency: user.currency, timezone: user.timezone },
     })
   })

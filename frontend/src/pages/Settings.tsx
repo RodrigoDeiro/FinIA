@@ -101,7 +101,7 @@ export function Settings() {
         <Card>
           <h3 className="mb-2 font-semibold text-slate-700">Perfil</h3>
           <Row label="Nome" value={user.name ?? '—'} />
-          <Row label="WhatsApp" value={user.phoneNumber} />
+          {user.phoneNumber && <Row label="WhatsApp" value={user.phoneNumber} />}
           <Row label="E-mail" value={user.email ?? '—'} />
           <Row label="Moeda" value={user.currency} />
           <Row label="Fuso horário" value={user.timezone} />

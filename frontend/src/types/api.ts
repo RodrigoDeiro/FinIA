@@ -11,7 +11,7 @@ export type CategoryOrigin = 'SYSTEM' | 'USER'
 export interface User {
   id: string
   name: string | null
-  phoneNumber: string
+  phoneNumber: string | null
   email: string | null
   timezone: string
   currency: string

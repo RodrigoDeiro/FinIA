@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { Layout } from '@/components/Layout'
 import { Login } from '@/pages/Login'
+import { Register } from '@/pages/Register'
 import { MagicLogin } from '@/pages/MagicLogin'
 import { Dashboard } from '@/pages/Dashboard'
 import { Transactions } from '@/pages/Transactions'
@@ -24,6 +25,7 @@ export function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/cadastro" element={<Register />} />
         <Route path="/auth/magic" element={<MagicLogin />} />
 
         <Route element={<Layout />}>

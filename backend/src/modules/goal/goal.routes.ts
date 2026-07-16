@@ -113,7 +113,7 @@ export async function goalRoutes(app: FastifyInstance): Promise<void> {
         where: { id: userId },
         select: { phoneNumber: true, currency: true },
       })
-      if (user) {
+      if (user?.phoneNumber) {
         await notificationService.sendText(
           user.phoneNumber,
           goalAchievedTemplate(goal.name, Number(goal.targetAmount), user.currency),
