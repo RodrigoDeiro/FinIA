@@ -24,19 +24,14 @@ const createBody = z.object({
   card: z.string().trim().max(60).optional().nullable(),
 })
 
-function monthsBetween(from: Date, to: Date): number {
-  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth())
-}
-
 const round2 = (n: number): number => Math.round(n * 100) / 100
 
 function compute(cp: CreditPurchase) {
   const total = Number(cp.totalAmount)
   const installmentAmount = round2(total / cp.installments)
 
-  // Nº de parcelas já vencidas (inclui o mês da 1ª parcela). 0 se ainda no futuro.
-  const elapsed = monthsBetween(cp.firstDueDate, new Date()) + 1
-  const paidCount = Math.max(0, Math.min(cp.installments, elapsed))
+  // Parcelas pagas: controle MANUAL (o usuário marca com "Paguei").
+  const paidCount = Math.max(0, Math.min(cp.installments, cp.paidInstallments))
   const remainingCount = cp.installments - paidCount
 
   const paidAmount = remainingCount === 0 ? total : round2(paidCount * installmentAmount)
@@ -118,5 +113,31 @@ export async function creditRoutes(app: FastifyInstance): Promise<void> {
     }
     await prisma.creditPurchase.update({ where: { id }, data: { deletedAt: new Date() } })
     return reply.code(204).send()
+  })
+
+  // ─── POST /:id/pay | /:id/unpay — marca/desfaz uma parcela paga ─────────────
+  async function adjustPaid(id: string, userId: string, delta: number) {
+    const cp = await prisma.creditPurchase.findFirst({ where: { id, userId, deletedAt: null } })
+    if (!cp) return null
+    const next = Math.max(0, Math.min(cp.installments, cp.paidInstallments + delta))
+    const updated = await prisma.creditPurchase.update({
+      where: { id },
+      data: { paidInstallments: next },
+    })
+    return compute(updated)
+  }
+
+  app.post('/:id/pay', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const purchase = await adjustPaid(id, request.auth!.userId, 1)
+    if (!purchase) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Compra não encontrada' } })
+    return reply.code(200).send({ purchase })
+  })
+
+  app.post('/:id/unpay', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const purchase = await adjustPaid(id, request.auth!.userId, -1)
+    if (!purchase) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Compra não encontrada' } })
+    return reply.code(200).send({ purchase })
   })
 }

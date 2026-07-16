@@ -263,3 +263,19 @@ export function useDeleteCreditPurchase() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['credit-purchases'] }),
   })
 }
+
+export function usePayInstallment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ purchase: CreditPurchase }>(`/credit-purchases/${id}/pay`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['credit-purchases'] }),
+  })
+}
+
+export function useUnpayInstallment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.post<{ purchase: CreditPurchase }>(`/credit-purchases/${id}/unpay`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['credit-purchases'] }),
+  })
+}

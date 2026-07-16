@@ -199,7 +199,10 @@ model CreditPurchase {
   /// Número de parcelas (ex: 6 = "6x")
   installments Int
 
-  /// Data da 1ª parcela (define o mês de referência do acompanhamento)
+  /// Parcelas já pagas (controle MANUAL: usuário marca com "Paguei")
+  paidInstallments Int @default(0)
+
+  /// Data da compra / 1ª parcela (referência de exibição)
   firstDueDate DateTime
 
   /// Apelido do cartão (opcional, ex: "Nubank")

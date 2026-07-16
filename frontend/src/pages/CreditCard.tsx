@@ -7,6 +7,8 @@ import {
   useCreditPurchases,
   useCreateCreditPurchase,
   useDeleteCreditPurchase,
+  usePayInstallment,
+  useUnpayInstallment,
 } from '@/hooks/useApi'
 import { formatMoney } from '@/lib/format'
 import type { CreditPurchase } from '@/types/api'
@@ -69,6 +71,8 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function PurchaseCard({ purchase: p }: { purchase: CreditPurchase }) {
   const del = useDeleteCreditPurchase()
+  const pay = usePayInstallment()
+  const unpay = useUnpayInstallment()
   const done = p.remainingCount === 0
 
   return (
@@ -101,7 +105,7 @@ function PurchaseCard({ purchase: p }: { purchase: CreditPurchase }) {
 
       <div className="mt-2 flex items-center justify-between text-sm">
         <span className="text-slate-500">
-          Parcela {Math.min(p.paidCount + (done ? 0 : 1), p.installments)} de {p.installments}
+          {p.paidCount} de {p.installments} pagas
         </span>
         <Badge tone={done ? 'green' : 'slate'}>
           {done ? 'Quitada' : `faltam ${p.remainingCount}`}
@@ -111,6 +115,19 @@ function PurchaseCard({ purchase: p }: { purchase: CreditPurchase }) {
       {!done && (
         <p className="mt-1 text-xs text-slate-400">Restam {formatMoney(p.remainingAmount)}</p>
       )}
+
+      <div className="mt-3 flex gap-2">
+        {!done && (
+          <Button className="flex-1" onClick={() => pay.mutate(p.id)} loading={pay.isPending}>
+            Paguei uma parcela
+          </Button>
+        )}
+        {p.paidCount > 0 && (
+          <Button variant="secondary" onClick={() => unpay.mutate(p.id)} loading={unpay.isPending}>
+            Desfazer
+          </Button>
+        )}
+      </div>
     </Card>
   )
 }
@@ -175,7 +192,7 @@ function CreateModal({ onClose }: { onClose: () => void }) {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label>1ª parcela</Label>
+            <Label>Data da compra</Label>
             <Input
               type="date"
               value={form.firstDueDate}
