@@ -175,6 +175,7 @@ model User {
   auditLogs         AuditLog[]
   messageLogs       MessageLog[]
   creditPurchases   CreditPurchase[]
+  recurringEntries  RecurringEntry[]
 
   @@index([phoneNumber])
   @@index([deletedAt])
@@ -219,6 +220,44 @@ model CreditPurchase {
 
   @@index([userId, deletedAt])
   @@map("credit_purchases")
+}
+
+// =============================================================================
+// RECURRING_ENTRIES — Lançamentos recorrentes (contas fixas + renda mensal)
+// =============================================================================
+//
+// Representam o "plano" mensal: renda fixa (INCOME) e contas fixas (EXPENSE)
+// que se repetem todo mês. NÃO geram transações — são usados no cálculo da
+// visão "Meu mês" (planejado) junto com as transações reais (variável).
+//
+model RecurringEntry {
+  id          String          @id @default(cuid())
+  userId      String
+
+  /// INCOME (renda/salário) ou EXPENSE (conta fixa)
+  type        TransactionType
+
+  description String          @db.VarChar(200)
+  amount      Decimal         @db.Decimal(15, 2)
+
+  /// Categoria opcional
+  categoryId  String?
+
+  /// Dia do mês (1-31) do recebimento/vencimento — opcional, para exibição
+  dayOfMonth  Int?
+
+  /// Ativo (conta no mês). Inativo = pausado sem apagar.
+  active      Boolean         @default(true)
+
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  deletedAt   DateTime?
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId, deletedAt])
+  @@map("recurring_entries")
 }
 
 // =============================================================================
@@ -305,6 +344,7 @@ model Category {
   transactions  Transaction[]
   budgets       Budget[]
   merchants     Merchant[]
+  recurringEntries RecurringEntry[]
 
   // userId + slug deve ser único (um usuário não pode ter duas "Alimentação")
   // userId = null + slug também único (uma categoria SYSTEM por slug)

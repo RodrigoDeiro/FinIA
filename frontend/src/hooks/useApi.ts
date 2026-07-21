@@ -6,6 +6,8 @@ import type {
   Category,
   CreditPurchase,
   CreditSummary,
+  MonthOverview,
+  RecurringEntry,
   Goal,
   Insight,
   Report,
@@ -238,6 +240,52 @@ function invalidateFinance(qc: ReturnType<typeof useQueryClient>): void {
   void qc.invalidateQueries({ queryKey: ['transactions'] })
   void qc.invalidateQueries({ queryKey: ['summary'] })
   void qc.invalidateQueries({ queryKey: ['budgets'] })
+}
+
+// ─── Meu mês (visão consolidada) ────────────────────────────────────────────
+export function useMonth(ref?: string) {
+  return useQuery({
+    queryKey: ['month', ref ?? 'current'],
+    queryFn: () => api.get<MonthOverview>(`/month${ref ? `?ref=${ref}` : ''}`),
+  })
+}
+
+// ─── Recorrentes (contas fixas + renda) ──────────────────────────────────────
+interface NewRecurring {
+  type: 'INCOME' | 'EXPENSE'
+  description: string
+  amount: number
+  categoryId?: string | null
+  dayOfMonth?: number | null
+}
+
+export function useRecurring() {
+  return useQuery({
+    queryKey: ['recurring'],
+    queryFn: () => api.get<{ items: RecurringEntry[] }>('/recurring'),
+    select: (d) => d.items,
+  })
+}
+
+function invalidateRecurring(qc: ReturnType<typeof useQueryClient>): void {
+  void qc.invalidateQueries({ queryKey: ['recurring'] })
+  void qc.invalidateQueries({ queryKey: ['month'] })
+}
+
+export function useCreateRecurring() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (data: NewRecurring) => api.post<{ item: RecurringEntry }>('/recurring', data),
+    onSuccess: () => invalidateRecurring(qc),
+  })
+}
+
+export function useDeleteRecurring() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => api.del<void>(`/recurring/${id}`),
+    onSuccess: () => invalidateRecurring(qc),
+  })
 }
 
 // ─── Telegram ─────────────────────────────────────────────────────────────────

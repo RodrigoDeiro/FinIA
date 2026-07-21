@@ -59,6 +59,28 @@ export interface CreditSummary {
   activeCount: number
 }
 
+export interface RecurringEntry {
+  id: string
+  type: 'INCOME' | 'EXPENSE'
+  description: string
+  amount: number
+  categoryId: string | null
+  dayOfMonth: number | null
+  active: boolean
+}
+
+export interface MonthOverview {
+  month: string
+  label: string
+  income: { recurring: number; transactions: number; total: number }
+  fixed: number
+  credit: number
+  variable: number
+  balance: number
+  byCategory: { name: string; total: number }[]
+  currency: string
+}
+
 export interface Transaction {
   id: string
   type: TransactionType

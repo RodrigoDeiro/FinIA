@@ -3,7 +3,7 @@
 // =============================================================================
 
 /** Comandos reconhecidos (texto não-transacional). */
-export type CommandKind = 'help' | 'greeting' | 'dashboard'
+export type CommandKind = 'help' | 'greeting' | 'dashboard' | 'summary'
 
 /**
  * Resultado do roteamento:

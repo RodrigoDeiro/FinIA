@@ -3,6 +3,8 @@ import { logger } from '@config/logger.js'
 import { resourceRoutes } from './resource.routes.js'
 import { transactionRoutes } from './transaction.routes.js'
 import { creditRoutes } from './credit.routes.js'
+import { recurringRoutes } from './recurring.routes.js'
+import { monthRoutes } from './month.routes.js'
 import { eventsRoutes } from './events.routes.js'
 import { budgetRoutes } from '@modules/budget/budget.routes.js'
 import { goalRoutes } from '@modules/goal/goal.routes.js'
@@ -30,6 +32,8 @@ export async function registerApiModule(app: FastifyInstance): Promise<void> {
       await api.register(resourceRoutes)
       await api.register(transactionRoutes, { prefix: '/transactions' })
       await api.register(creditRoutes, { prefix: '/credit-purchases' })
+      await api.register(recurringRoutes, { prefix: '/recurring' })
+      await api.register(monthRoutes, { prefix: '/month' })
       await api.register(eventsRoutes)
       // Sprint 4
       await api.register(budgetRoutes, { prefix: '/budgets' })

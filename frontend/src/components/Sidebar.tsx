@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
+  CalendarDays,
   Receipt,
   CreditCard,
   Wallet,
@@ -15,6 +16,7 @@ import { cn } from '@/lib/cn'
 
 const NAV = [
   { to: '/', label: 'Visão geral', icon: LayoutDashboard, end: true },
+  { to: '/mes', label: 'Meu mês', icon: CalendarDays },
   { to: '/transacoes', label: 'Transações', icon: Receipt },
   { to: '/cartao', label: 'Cartão', icon: CreditCard },
   { to: '/orcamentos', label: 'Orçamentos', icon: Wallet },

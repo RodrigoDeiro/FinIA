@@ -33,6 +33,9 @@ const HELP_WORDS = ['ajuda', 'help', 'socorro', 'duvida', 'como funciona', 'como
 // query.detector — responder com um resumo real é melhor que "em breve".
 const DASHBOARD_WORDS = ['dashboard', 'painel', 'site', 'web']
 
+// "resumo" / "meu mês" → visão consolidada do mês (renda, fixas, cartão, sobra).
+const SUMMARY_WORDS = ['resumo', 'balanco', 'meu mes', 'fechamento do mes', 'como esta o mes']
+
 const hasDigit = (s: string): boolean => /\d/.test(s)
 
 export function detectCommand(text: string): DetectedMessage {
@@ -41,6 +44,10 @@ export function detectCommand(text: string): DetectedMessage {
   // Ajuda tem prioridade — palavra explícita de pedido de ajuda.
   if (HELP_WORDS.some((w) => normalized.includes(w))) {
     return { kind: 'command', command: 'help' }
+  }
+
+  if (SUMMARY_WORDS.some((w) => normalized.includes(w))) {
+    return { kind: 'command', command: 'summary' }
   }
 
   if (DASHBOARD_WORDS.some((w) => normalized.includes(w))) {
