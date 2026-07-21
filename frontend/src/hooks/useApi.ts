@@ -240,6 +240,28 @@ function invalidateFinance(qc: ReturnType<typeof useQueryClient>): void {
   void qc.invalidateQueries({ queryKey: ['budgets'] })
 }
 
+// ─── Telegram ─────────────────────────────────────────────────────────────────
+export function useTelegramStatus() {
+  return useQuery({
+    queryKey: ['telegram'],
+    queryFn: () => api.get<{ available: boolean; connected: boolean }>('/telegram'),
+  })
+}
+
+export function useTelegramConnect() {
+  return useMutation({
+    mutationFn: () => api.post<{ url: string }>('/telegram/connect'),
+  })
+}
+
+export function useTelegramDisconnect() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post<{ connected: boolean }>('/telegram/disconnect'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['telegram'] }),
+  })
+}
+
 // ─── Cartão de crédito ────────────────────────────────────────────────────────
 export function useCreditPurchases() {
   return useQuery({

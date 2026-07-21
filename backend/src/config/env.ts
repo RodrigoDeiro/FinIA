@@ -86,6 +86,13 @@ const envSchema = z.object({
     .enum(['evolution', 'meta'])
     .default('evolution'),
 
+  // ─── Telegram Bot (opcional) ────────────────────────────────────────────────
+  // Se TELEGRAM_BOT_TOKEN estiver presente, o módulo Telegram é ativado (webhook
+  // + envio). Sem ele, o app sobe normalmente sem Telegram.
+  TELEGRAM_BOT_TOKEN:      z.string().min(1).optional(),
+  TELEGRAM_BOT_USERNAME:   z.string().min(1).optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().min(1).optional(),
+
   // ─── IA — Anthropic Claude (Sprint 2+) ────────────────────────────────────
   // OPCIONAL aqui. Validação real ocorre em ai.module.ts ao inicializar.
   ANTHROPIC_API_KEY: z

@@ -143,6 +143,9 @@ model User {
   /// definida (usuário só acessa via magic link). Ver auth/password login.
   passwordHash String? @db.VarChar(255)
 
+  /// Chat ID do Telegram vinculado (quando o usuário conecta o bot). Único.
+  telegramChatId String? @unique @db.VarChar(32)
+
   /// Timezone IANA (ex: America/Sao_Paulo) — inferido pelo DDI inicialmente
   timezone    String   @default("America/Sao_Paulo") @db.VarChar(50)
 

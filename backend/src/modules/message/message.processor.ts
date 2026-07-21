@@ -1,3 +1,4 @@
+import type { User } from '@prisma/client'
 import { prisma } from '@database/prisma.js'
 import { logger } from '@config/logger.js'
 import type { NormalizedMessage } from '@modules/whatsapp/types/normalized-message.type.js'
@@ -34,43 +35,40 @@ import { handleCommand } from './command/handlers/index.js'
 //
 // =============================================================================
 
-export async function processIncomingMessage(msg: NormalizedMessage): Promise<void> {
-  const user = await findOrCreateByPhone(msg.from)
-  const text = msg.text?.trim() ?? ''
-
-  // 2. Mídia sem texto
-  if (!text) {
-    await notificationService.sendText(msg.from, mediaUnsupportedTemplate(), user.id)
-    await recordMessageLog(msg, user.id, null)
-    return
-  }
-
-  // 3. Comando
+/**
+ * Miolo do processamento, independente de canal (WhatsApp/Telegram): recebe o
+ * usuário já resolvido, o texto e um callback `reply` para responder pelo canal
+ * de origem. Retorna o id da transação criada (ou null). NÃO grava MessageLog
+ * nem trata mídia — isso fica a cargo do adaptador de cada canal.
+ */
+export async function processMessageForUser(
+  user: User,
+  text: string,
+  reply: (message: string) => Promise<void>,
+): Promise<string | null> {
+  // Comando (oi/ajuda/dashboard)
   const routed = routeMessage(text)
   if (routed.kind === 'command') {
-    const reply = await handleCommand(routed.command, user)
-    await notificationService.sendText(msg.from, reply, user.id)
-    await recordMessageLog(msg, user.id, null)
-    return
+    await reply(await handleCommand(routed.command, user))
+    return null
   }
 
-  // 3.5. Consulta financeira ("quanto gastei esse mês", "saldo", "resumo")
+  // Consulta financeira ("quanto gastei esse mês", "saldo", "resumo")
   if (routed.kind === 'query') {
-    const reply = await orchestrateFinancialQuery(text, user)
-    await notificationService.sendText(msg.from, reply, user.id)
-    await recordExchange(user.id, text, reply)
-    await recordMessageLog(msg, user.id, null)
-    return
+    const answer = await orchestrateFinancialQuery(text, user)
+    await reply(answer)
+    await recordExchange(user.id, text, answer)
+    return null
   }
 
-  // 4. Texto livre → parser determinístico
+  // Texto livre → parser determinístico
   const { decision, parsed } = await orchestrateParse(text, {
     userId: user.id,
     timezone: user.timezone,
   })
 
   if (decision === 'ai_fallback' || parsed.amount === null) {
-    // Sprint 2: o parser determinístico não resolveu → tenta o Claude.
+    // O parser determinístico não resolveu → tenta o Claude.
     const aiResult = await parseWithAI(text, { timezone: user.timezone })
 
     if (aiResult) {
@@ -98,16 +96,14 @@ export async function processIncomingMessage(msg: NormalizedMessage): Promise<vo
         timezone: user.timezone,
         needsReview: aiResult.confidence < CONFIDENCE.AUTO_SAVE,
       })
-      await notificationService.sendText(msg.from, aiReply, user.id)
+      await reply(aiReply)
       await recordExchange(user.id, text, aiReply)
-      await recordMessageLog(msg, user.id, aiTransaction.id)
-      return
+      return aiTransaction.id
     }
 
     // IA desativada ou também não entendeu → pede reformulação.
-    await notificationService.sendText(msg.from, notUnderstoodTemplate(text), user.id)
-    await recordMessageLog(msg, user.id, null)
-    return
+    await reply(notUnderstoodTemplate(text))
+    return null
   }
 
   const transaction = await createTransaction({
@@ -125,7 +121,7 @@ export async function processIncomingMessage(msg: NormalizedMessage): Promise<vo
     needsReview: decision === 'needs_review',
   })
 
-  const reply = transactionConfirmationTemplate({
+  const confirmation = transactionConfirmationTemplate({
     type: transaction.type,
     amount: parsed.amount,
     currency: user.currency,
@@ -134,9 +130,28 @@ export async function processIncomingMessage(msg: NormalizedMessage): Promise<vo
     timezone: user.timezone,
     needsReview: decision === 'needs_review',
   })
-  await notificationService.sendText(msg.from, reply, user.id)
-  await recordExchange(user.id, text, reply)
-  await recordMessageLog(msg, user.id, transaction.id)
+  await reply(confirmation)
+  await recordExchange(user.id, text, confirmation)
+  return transaction.id
+}
+
+export async function processIncomingMessage(msg: NormalizedMessage): Promise<void> {
+  const user = await findOrCreateByPhone(msg.from)
+  const text = msg.text?.trim() ?? ''
+
+  // Mídia sem texto
+  if (!text) {
+    await notificationService.sendText(msg.from, mediaUnsupportedTemplate(), user.id)
+    await recordMessageLog(msg, user.id, null)
+    return
+  }
+
+  const transactionId = await processMessageForUser(
+    user,
+    text,
+    (message) => notificationService.sendText(msg.from, message, user.id),
+  )
+  await recordMessageLog(msg, user.id, transactionId)
 }
 
 /**

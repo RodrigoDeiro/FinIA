@@ -1,8 +1,16 @@
 import { useState, type FormEvent } from 'react'
-import { X } from 'lucide-react'
+import { X, Check } from 'lucide-react'
 import { PageHeader } from '@/components/Layout'
 import { Card, Spinner, Badge, Button } from '@/components/ui'
-import { useMe, useCategories, useCreateCategory, useDeleteCategory } from '@/hooks/useApi'
+import {
+  useMe,
+  useCategories,
+  useCreateCategory,
+  useDeleteCategory,
+  useTelegramStatus,
+  useTelegramConnect,
+  useTelegramDisconnect,
+} from '@/hooks/useApi'
 import { formatDate } from '@/lib/format'
 import { api, ApiError } from '@/lib/api'
 
@@ -165,6 +173,43 @@ function CategoriesCard() {
   )
 }
 
+function TelegramCard() {
+  const { data } = useTelegramStatus()
+  const connect = useTelegramConnect()
+  const disconnect = useTelegramDisconnect()
+
+  if (!data?.available) return null
+
+  return (
+    <Card>
+      <h3 className="mb-1 font-semibold text-slate-700">Telegram</h3>
+      <p className="mb-3 text-xs text-slate-400">
+        Registre gastos mandando mensagem para o bot no Telegram — ex: “mercado 89,90”.
+      </p>
+      {data.connected ? (
+        <div className="flex items-center justify-between gap-3">
+          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600">
+            <Check className="h-4 w-4" /> Conectado
+          </span>
+          <Button variant="secondary" onClick={() => disconnect.mutate()} loading={disconnect.isPending}>
+            Desconectar
+          </Button>
+        </div>
+      ) : (
+        <Button
+          loading={connect.isPending}
+          onClick={async () => {
+            const res = await connect.mutateAsync()
+            window.open(res.url, '_blank')
+          }}
+        >
+          Conectar Telegram
+        </Button>
+      )}
+    </Card>
+  )
+}
+
 export function Settings() {
   const { data, isLoading } = useMe()
 
@@ -203,6 +248,8 @@ export function Settings() {
         </Card>
 
         <PasswordCard currentEmail={user.email ?? null} />
+
+        <TelegramCard />
 
         <CategoriesCard />
       </div>

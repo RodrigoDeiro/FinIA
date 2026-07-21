@@ -4,6 +4,8 @@ import { prisma } from '@database/prisma.js'
 import { tenantPrisma } from '@database/tenant.prisma.js'
 import { buildFinancialSnapshot } from '@modules/ai/context.builder.js'
 import { normalizeText } from '@shared/utils/text.util.js'
+import { env } from '@config/env.js'
+import { createTelegramLinkCode } from '@modules/telegram/telegram.link.service.js'
 
 const createCategoryBody = z.object({ name: z.string().trim().min(1).max(60) })
 
@@ -123,6 +125,35 @@ export async function resourceRoutes(app: FastifyInstance): Promise<void> {
     }
     await prisma.category.update({ where: { id }, data: { deletedAt: new Date() } })
     return reply.code(204).send()
+  })
+
+  // ─── Telegram — status / conectar / desconectar ────────────────────────────
+  app.get('/telegram', async (request) => {
+    const user = await prisma.user.findFirst({
+      where: { id: request.auth!.userId },
+      select: { telegramChatId: true },
+    })
+    return {
+      available: Boolean(env.TELEGRAM_BOT_USERNAME),
+      connected: Boolean(user?.telegramChatId),
+    }
+  })
+
+  app.post('/telegram/connect', async (request, reply) => {
+    const username = env.TELEGRAM_BOT_USERNAME
+    if (!username) {
+      return reply.code(503).send({ error: { code: 'TELEGRAM_OFF', message: 'Telegram não está configurado' } })
+    }
+    const code = await createTelegramLinkCode(request.auth!.userId)
+    return { url: `https://t.me/${username}?start=${code}` }
+  })
+
+  app.post('/telegram/disconnect', async (request) => {
+    await prisma.user.update({
+      where: { id: request.auth!.userId },
+      data: { telegramChatId: null },
+    })
+    return { connected: false }
   })
 
   // ─── GET /summary — visão do mês para o dashboard ──────────────────────────

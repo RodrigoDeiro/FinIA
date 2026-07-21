@@ -13,6 +13,7 @@ import { redis } from '@cache/redis.js'
 import { errorHandler } from '@shared/middleware/error-handler.js'
 import { requestIdPlugin, genReqId } from '@shared/middleware/request-id.js'
 import { registerWhatsAppModule } from '@modules/whatsapp/whatsapp.module.js'
+import { registerTelegramModule } from '@modules/telegram/telegram.module.js'
 import { initAiModule } from '@modules/ai/ai.module.js'
 import { registerAuthModule } from '@modules/auth/auth.module.js'
 import { registerApiModule } from '@modules/api/api.module.js'
@@ -69,6 +70,9 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // ─── Módulo WhatsApp (webhook) ─────────────────────────────────────────────
   await registerWhatsAppModule(app)
+
+  // ─── Módulo Telegram (webhook — ativado se TELEGRAM_BOT_TOKEN presente) ─────
+  await registerTelegramModule(app)
 
   // ─── Auth + API do dashboard (Sprint 3) ────────────────────────────────────
   await registerAuthModule(app)
