@@ -93,14 +93,22 @@ function RecurringManager() {
   const [type, setType] = useState<'EXPENSE' | 'INCOME'>('EXPENSE')
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
+  const [day, setDay] = useState('')
 
   async function add(e: FormEvent) {
     e.preventDefault()
     const value = Number(amount.replace(',', '.'))
     if (!description.trim() || !(value > 0)) return
-    await create.mutateAsync({ type, description: description.trim(), amount: value })
+    const d = Number(day)
+    await create.mutateAsync({
+      type,
+      description: description.trim(),
+      amount: value,
+      dayOfMonth: d >= 1 && d <= 31 ? d : null,
+    })
     setDescription('')
     setAmount('')
+    setDay('')
   }
 
   const income = items?.filter((i) => i.type === 'INCOME') ?? []
@@ -131,6 +139,16 @@ function RecurringManager() {
             placeholder="Valor (R$)"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
+          />
+          <Input
+            type="number"
+            min={1}
+            max={31}
+            placeholder="Dia"
+            title="Dia do vencimento/recebimento (opcional)"
+            value={day}
+            onChange={(e) => setDay(e.target.value)}
+            style={{ maxWidth: 84 }}
           />
           <Button type="submit" loading={create.isPending}>
             Adicionar
@@ -164,7 +182,14 @@ function RecurringList({
         <div className="divide-y divide-slate-100">
           {items.map((i) => (
             <div key={i.id} className="flex items-center justify-between py-2 text-sm">
-              <span className="min-w-0 truncate text-slate-700">{i.description}</span>
+              <span className="min-w-0 truncate text-slate-700">
+                {i.description}
+                {i.dayOfMonth != null && (
+                  <span className="ml-2 text-xs text-slate-400">
+                    {tone === 'income' ? 'recebe' : 'vence'} dia {i.dayOfMonth}
+                  </span>
+                )}
+              </span>
               <div className="flex shrink-0 items-center gap-2">
                 <span className={tone === 'income' ? 'font-medium text-brand-600' : 'font-medium text-slate-800'}>
                   {formatMoney(i.amount)}

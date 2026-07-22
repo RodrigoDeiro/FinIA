@@ -6,6 +6,7 @@ import { NotFoundError } from '@shared/errors/index.js'
 import { EVENTS, emitTransactionEvent } from '@shared/events/event.bus.js'
 import * as txRepository from './transaction.repository.js'
 import { validateTransaction } from './transaction.validator.js'
+import { resolveCategorySlug } from '@modules/parse/category-keywords.js'
 import type { CreateTransactionInput } from './transaction.types.js'
 
 // =============================================================================
@@ -44,8 +45,15 @@ export async function createTransaction(input: CreateTransactionInput): Promise<
     throw new NotFoundError('Conta padrão do usuário', input.userId)
   }
 
-  // 3. Categoria (a do merchant, ou o fallback "outros")
-  const categoryId = input.categoryId ?? (await txRepository.getFallbackCategoryId())
+  // 3. Categoria: a do merchant → palavra-chave no texto → fallback "outros".
+  //    A camada de palavra-chave cobre termos genéricos (mercado, posto, farmacia)
+  //    que não são marcas conhecidas e antes caíam sempre em "Outros".
+  let categoryId = input.categoryId
+  if (!categoryId) {
+    const slug = resolveCategorySlug(input.originalText ?? input.merchantName ?? '')
+    if (slug) categoryId = (await txRepository.getSystemCategoryIdBySlug(slug)) ?? undefined
+  }
+  categoryId = categoryId ?? (await txRepository.getFallbackCategoryId())
 
   // 4. Persiste
   const transaction = await txRepository.create({

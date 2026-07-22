@@ -46,6 +46,21 @@ export async function getFallbackCategoryId(): Promise<string> {
   return category.id
 }
 
+// Mapa slug → id das categorias do SISTEMA (imutáveis) — cacheado no processo.
+let systemCategoryMap: Map<string, string> | null = null
+
+/** Id de uma categoria do sistema pelo slug (ex: 'alimentacao'). Null se não existir. */
+export async function getSystemCategoryIdBySlug(slug: string): Promise<string | null> {
+  if (!systemCategoryMap) {
+    const cats = await prisma.category.findMany({
+      where: { userId: null, origin: 'SYSTEM' },
+      select: { id: true, slug: true },
+    })
+    systemCategoryMap = new Map(cats.map((c) => [c.slug, c.id]))
+  }
+  return systemCategoryMap.get(slug) ?? null
+}
+
 /** Insere uma transação. */
 export async function create(data: Prisma.TransactionUncheckedCreateInput): Promise<Transaction> {
   return prisma.transaction.create({ data })
